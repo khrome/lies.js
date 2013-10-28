@@ -1,0 +1,31 @@
+{
+    "name": "lies",
+    "homepage": "https://github.com/khrome/lies",
+    "version": "0.0.1-alpha",
+    "main": "lies.js",
+    "description": "",
+    "keywords": [
+        "promises",
+        "state",
+        "machine"
+    ],
+    "author": "Abbey Hawk Sparrow <@khrome> (http://patternweaver.com)",
+    "contributors": [],
+    "bugs": {
+        "url": "https://github.com/khrome/lies/issues"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/khrome/lies.git"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "mocha": "*",
+        "should": "*"
+    },
+    "optionalDependencies": {},
+    "engines": {
+        "node": "*"
+    }
+}
