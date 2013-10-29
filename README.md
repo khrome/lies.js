@@ -14,15 +14,24 @@ This library springs directly out of a problem Promises/Deferreds created a prob
 
 But as we were talking I realized if you had a generalized textual state machine you can attach events to certain configurations, in some cases to change state, in others to provide a terminal condition, all without spewing new promises all over memory, and what's better you could rewind states (like if you wanted to retry a specific action, or perhaps there was an incremental error and you want to back up many states), or in our case modify the success condition to ignore failures, or a percentage of fails, or fails a certain tasks... really anything. Suddenly the promises interface and underlying state mechanics(though not the spec) seemed extremely powerful.
 
-But none of the existing promise implementations are built this way.
+But none of the existing promise implementations are built this way. But before you use this, I'd like to make it clear: I don't think you should be using promises... *but* if you do, I think more expressiveness(with less complexity) can be had from a state machine based approach than an closure encapsulation approach. So in the end, use this library as a last resort when callbacks get you down.
+
+I suggest reading the following:
+
+[Designing APIs for Asynchrony](http://blog.izs.me/post/59142742143/designing-apis-for-asynchrony)
+and internally referenced was a person from my childhood (how crazy is that, right?)
+[Callbacks, synchronous and asynchronous](http://blog.ometer.com/2011/07/24/callbacks-synchronous-and-asynchronous/)
+But there he is dropping some knowledge on you.
 
 Covenant Usage
 --------------
 
-    "The man who promises everything is sure to fulfill nothing, and everyone who promises too much is in danger of using evil means in order to carry out his promises, and is already on the road to perdition."
+    "The man who promises everything is sure to fulfill nothing, 
+     and everyone who promises too much is in danger of using evil means in order to carry out his promises,
+     and is already on the road to perdition."
     -Carl Jung
     
-So the simple case of this statemachine is a rough (eventually exact, via a 'strict' mode) implementation of [Promises/A](http://wiki.commonjs.org/wiki/Promises/A)
+So the simple case of this statemachine is a rough (eventually exact, via a 'strict' mode) implementation of [promises/A](http://wiki.commonjs.org/wiki/Promises/A) and integrating (rather than externalizing) deferreds. 
 
     var promise = require('lies').covenant;
 
@@ -64,9 +73,50 @@ Lies Usage
     "The promise given was a necessity of the past:  the word broken is a necessity of the present."
     -Niccolo Machiavelli
     
-Lies are very simply textual state machines which allow you to attach transitions and logic to particular states. The Covenant is simply a particular usage of a lie, conforming to [promises/A](http://wiki.commonjs.org/wiki/Promises/A) and integrating (rather than externalizing) deferreds. 
+Lies are very simply textual state machines which allow you to attach transitions and logic to particular states. The Covenant is simply a particular usage of a lie. You could, for instance, modify the basic covenant implementation to always resolve even if individual covenants fail:
 
-(todo)
+    var passthruCovenant = function(){
+        this.lie = new lies('pending');
+        var lie = this.lie;
+        this.calls = {};
+        var calls = this.calls;
+        lie.equivocate('pending', function(){ //if pending and all resolved, resolve
+            if(lie.states.indexOf('pending') != -1) return false;
+            else return true;
+        },'resolved');
+        lie.pledge('pending', function(){ //pledge to process the next item while pending
+            var index;
+            if((index = lie.states.indexOf('pending')) != -1){
+                var rejectedIndex;
+                var wasRejected = ((rejectedIndex = lie.states.indexOf('rejected')) != -1)?
+                    lie.values[rejectedIndex]:
+                    false;
+                if(lie.states[index].when){
+                    lie.states[index].lie.assess(); //make sure the inner lie is acting
+                }else{
+                    setTimeout(function(){
+                        try{
+                            if(wasRejected){
+                                lie.values[index] = calls[index].error(wasRejected);
+                                lie.states[index] = 'skipped'; //mark this as skipped because we error out before it
+                            }else{
+                                var lastResult = index-1;
+                                while(lastResult > 0 && calls[lastResult].callback == undefined) lastResult--;
+                                if(calls[index].callback) lie.values[index] = calls[index].callback(lie.values[lastResult]);
+                                lie.states[index] = 'resolved'; //mark this as skipped because we error out before it
+                            }
+                        }catch(ex){
+                            lie.values[index] = ex;
+                            lie.states[index] = 'rejected';
+                            if(calls[index].error) calls[index].error(ex);
+                        }
+                        lie.assess();
+                    }, 0);
+                }
+            }//else console.log('not pending');
+        });
+    };
+    passthruCovenant.prototype = lies.covenant.prototype;
 
 Background
 ----------
@@ -74,17 +124,17 @@ Background
     "The woods are lovely, dark and deep. But I have promises to keep, and miles to go before I sleep.
     -Robert Frost
 
-After much discussion, thought and code perusal, I think promises/deferreds are over hyped bullshit that solve next to nothing. 
+After much discussion, thought and code perusal, I think promises/deferreds are over hyped bullshit that solve next to nothing other than mindless transformations for pseudo imperative metalanguages. 
 
 They are:
 
-1) State machines that are only capable of moving in 1 direction
-2) functional compositions which have indeterminate returns
-3) claim to solve callback nesting hell, but actually exchange a callback which executes as a byproduct of the task to one which must be called by you when the unrewindable state machine terminates.
-4) internally you have a ton of nested callbacks, so from a performance standpoint there is no gain
-5) have no concept of partial error, then succeed
+1. State machines that are only capable of moving in 1 direction
+2. functional compositions which have indeterminate returns
+3. claim to solve callback nesting hell, but actually exchange a callback which executes as a byproduct of the task to one which must be called by you when the unrewindable state machine terminates.
+4. internally you have a ton of nested callbacks, so from a performance standpoint there is no gain
+5. have no concept of partial error, then succeed
 
-Conventional wisdom from other languages is that exception handling is needlessly, node's error passing paradigm was ever an issue for me... frankly I feel errors should be trapped within a level or two and *always* from within the module they originate in. From that perspective I gain nothing. I still have to manually transfer an error event across any scope/event return boundary, so really all I got is that chained callbacks can all throw to the same block. That's literally the only feature I got from *all* that indirection.
+Conventional wisdom from other languages is that exception handling is needlessly indirect and leads to non-obvious code paths, which hurts maintainability. Node's error passing paradigm was ever an issue for me (intuitive, even)... frankly I feel errors should be trapped within a level or two and *always* from within the module they originate in. From that perspective I gain nothing. I still have to manually transfer an error event across any scope/event return boundary, so really all I got is that chained callbacks can all throw to the same block. That's literally the only feature I got from *all* that indirection.
 
 The insidious thing is that it requires *every* async activity to be implemented as a promise in order for this to be useful. Let's recode everything!! Yay!! It will infect every return of every call... which is great for guys who like metalanguages built on top of JS, but pretty terrible for those of us who like JS for what it *is*.
 
@@ -139,27 +189,71 @@ OK, so let's compare this to the standard JS styles
         });
     }
     
-So, I don't really like this example, because it's something stupid that I would *never* implement this way in the real world, but I want to compare apples to apples, so there you go (listed as an elegant [example](https://gist.github.com/domenic/2936696) of the power of promises). In this example all we've gained is indirection through a library and the ability to simply translate seemingly imperative statements in metalanguages. Let's try something a little more 'real world':
+So, I don't really like this example, because it's something pointless that I would *never* implement this way in the real world, but I want to compare apples to apples, so there you go (listed as an elegant [example](https://gist.github.com/domenic/2936696) of the power of promises). In this example all we've gained is indirection through a library and the ability to simply translate seemingly imperative statements in metalanguages. Let's try something a little more 'real world':
 
-(todo)
+    var signupVariables = $.extend(clone(Strings['en'].userSignup), userData);
+    var configPromise = readFile('signupConfig.json');
+    var fileLoadPromise = config.then(function( data ){
+        $.extend(signupVariables, config)
+        return templatePromise('userSignup.tpl');
+    }, function( err ) {
+        logError(err);
+        return templatePromise('userSignup.tpl');
+    }).then(function( template ){
+        template.then(function(template){
+            var renderedHTML = renderTemplate(template, signupVariables);
+            $('modal').html(renderedHTML).show();
+        }, function( err ) {
+            logError(err);
+        });
+    });
+    
+Very practical, but complete bullshit. Instead let's try:
+
+    var signupVariables = $.extend(clone(Strings['en'].userSignup), userData);
+    request({
+        url:'signupConfig.json',
+        json : true
+    }, function(err, request, config){
+        if(!err) $.extend(signupVariables, config)
+        request('userSignup.tpl', function(err, request, result){
+            var renderedHTML = renderTemplate(template, signupVariables);
+            $('modal').html(renderedHTML).show();
+        });
+    });
+    
+So what was it you were saying about the woes of 'callback hell'... the need for pointless indirection through another library? I think the man in black said it so much more eloquently than I ever could:
+
+![well, fuck that](cash.jpg)
 
 If you want flow control, just use [async](https://npmjs.org/package/async) or (shameless plug) [async-arrays](https://npmjs.org/package/async-arrays).
-
-If you are an RPC guy, please go away... your own code will be your punishment for what you have done.
 
 Not to burst everyone's bubble, but if you just use objects, who's members handle a limited depth of asynchronous callbacks, not only will your functions be short and action specific, but you can stop the indirect imperative mishmash of functions that most JS is, and promises only encourages.
 
 Testing
 -------
+
+    "We promise, hope, believe, — there breathes despair."
+    -Lord Byron
+
 Currently the tests only run a primitive set of tests for conformance to the promises/A spec, there will eventually be a 'strict' (wasteful) mode which should pass the full suite of Promises/A tests. Eventually I'll implement a 3rd interface for Promises/B but it remains to be seen if Promises/A+ is worth implementing. Part of the premise of this library is that in celebrating what promises are, people have totally passed over the power of implementing them as extension of a generalized state machine.
 
 All you have to do is run:
 
     mocha
 
-A final note
+A Final Note
 ------------
-I'm probably being needlessly aggressive in my tone here, but it's deliberate to match those voices hailing promises as some radical new programming paradigm, rather than a clever layover from [project Xanadu](http://en.wikipedia.org/wiki/Project_Xanadu), much like the equally clever [Enfilade](http://en.wikipedia.org/wiki/Enfilade_(Xanadu). This is nothing new, but in it's current incarnation threatens to completely infect js libs and I feel like voices are needed to stem this tide of needless indirection. If you disagree, I'd love to hear about your reasoning.
+I'm probably being needlessly aggressive in my tone here, but it's deliberate to match those voices hailing promises as some radical new programming paradigm, rather than a clever layover from [project Xanadu](http://en.wikipedia.org/wiki/Project_Xanadu), much like the equally clever [Enfilade](http://en.wikipedia.org/wiki/Enfilade_(Xanadu\)). This is nothing new, but in it's current incarnation threatens to completely infect js libs and I feel like voices are needed to stem this tide of needless indirection. If you disagree, I'd love to hear about your reasoning even if you just think I'm being a prick.
+
+    "Should my voice fade in your ears, and my love vanish in your memory, then I will come again,
+    And with a richer heart and lips more yielding to the spirit will I speak.
+    Yea, I shall return with the tide…
+    If aught I have said is truth, that truth shall reveal itself in a clearer voice, and in words more kin to your thoughts…
+    And if this day is not a fulfillment of your needs and my love, then let it be a promise till another day…
+    Know, therefore, that from the greater silence I shall return…
+    A little while, a moment of rest upon the wind, and another woman shall bear me."
+    -Kahlil Gibran : The Promise
 
 Enjoy,
 
