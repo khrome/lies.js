@@ -16,13 +16,6 @@ But as we were talking I realized if you had a generalized textual state machine
 
 But none of the existing promise implementations are built this way. But before you use this, I'd like to make it clear: I don't think you should be using promises... *but* if you do, I think more expressiveness(with less complexity) can be had from a state machine based approach than an closure encapsulation approach. So in the end, use this library as a last resort when callbacks get you down.
 
-I suggest reading the following:
-
-[Designing APIs for Asynchrony](http://blog.izs.me/post/59142742143/designing-apis-for-asynchrony)
-and internally referenced was a person from my childhood (how crazy is that, right?)
-[Callbacks, synchronous and asynchronous](http://blog.ometer.com/2011/07/24/callbacks-synchronous-and-asynchronous/)
-But there he is dropping some knowledge on you.
-
 Covenant Usage
 --------------
 
@@ -224,7 +217,7 @@ Very practical, but complete bullshit. Instead let's try:
     
 So what was it you were saying about the woes of 'callback hell'... the need for pointless indirection through another library? I think the man in black said it so much more eloquently than I ever could:
 
-![well, fuck that](cash.jpg)
+![well, fuck that](https://raw2.github.com/khrome/lies.js/master/cash.jpg)
 
 If you want flow control, just use [async](https://npmjs.org/package/async) or (shameless plug) [async-arrays](https://npmjs.org/package/async-arrays).
 
